@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Intruders · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Intruder gallery</h1></div>
+<p class="muted">Captured on denied-face events. Spoof attempts are flagged.</p>
+{% if msg %}<div class="notice">{{ msg }}</div>{% endif %}
+
+<div class="error" style="background:rgba(39,224,255,.06);border-color:var(--cyan)">
+  Deleting here removes the <b>dashboard copy only</b>. A protected copy is kept on the device
+  memory card for 31 days and auto-deletes — it cannot be deleted manually.
+</div>
+
+<form method="post" onsubmit="return window.__intr_ok(event)">
+  <div class="gallery big">
+    {% for r in rows %}
+      {% set fname = r.image_path.split('/')[-1].split('\\')[-1] %}
+      <figure class="thumb">
+        <label style="position:absolute;top:6px;left:6px;z-index:2">
+          <input type="checkbox" name="ids" value="{{ r.id }}">
+        </label>
+        <a href="/media/unauthorized/{{ fname }}"><img src="/media/unauthorized/{{ fname }}" alt="intruder"></a>
+        <figcaption>
+          <span class="badge {{ r.result }}">{{ 'spoof' if r.result == 'denied-spoof' else 'unknown' }}</span>
+          <span class="muted">{{ r.ts }}</span>
+        </figcaption>
+      </figure>
+    {% else %}
+      <p class="muted">No intruder captures.</p>
+    {% endfor %}
+  </div>
+
+  {% if rows %}
+  <div class="card" style="margin-top:14px">
+    <p class="muted">Tick images to delete (one or many), or delete the whole gallery.
+      Admin password required.</p>
+    <label style="max-width:320px">Admin password
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <div style="margin-top:10px;display:flex;gap:10px">
+      <button class="danger" formaction="/intruders/delete">Delete selected</button>
+      <button class="danger" formaction="/intruders/delete-all"
+              onclick="window.__intr_all=true">Delete all</button>
+    </div>
+  </div>
+  {% endif %}
+</form>
+
+<script>
+window.__intr_all = false;
+window.__intr_ok = function(e){
+  if(window.__intr_all){
+    window.__intr_all = false;
+    return confirm('Delete ALL dashboard intruder images? The memory-card archive is kept.');
+  }
+  const n = document.querySelectorAll('input[name=ids]:checked').length;
+  if(n === 0){ alert('Tick at least one image, or use "Delete all".'); return false; }
+  return confirm('Delete ' + n + ' selected image(s) from the dashboard?');
+};
+</script>
+{% endblock %}

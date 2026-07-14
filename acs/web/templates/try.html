@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Try (live) · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Try it (live camera)</h1></div>
+
+{% if not available %}
+<div class="error">Face recognition is not ready: {{ error }}<br>
+  Install OpenCV (<code>pip install opencv-python</code>) and download the models
+  (<code>python scripts/download_models.py</code>), then restart.</div>
+{% else %}
+
+<div class="try-grid">
+  <div class="card">
+    <div class="mode-tabs">
+      <button id="tab-reg" class="on" onclick="setMode('reg')">Register mode</button>
+      <button id="tab-run" onclick="setMode('run')">Run mode</button>
+    </div>
+    <div class="video-wrap">
+      <img id="cam" src="/camera/stream" alt="camera">
+      <div class="scan"></div>
+      <div id="status" class="status">◉ LIVE · scanning…</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="panel-reg">
+      <h2>Enroll a face</h2>
+      <label class="fld">Your name<input id="reg-name" placeholder="e.g. Asha Khan"></label>
+
+      <div id="enroll-idle">
+        <p class="muted" style="font-size:12.5px;line-height:1.5">
+          Guided capture takes <b>~30 detailed samples</b> from several angles and
+          normalizes lighting, so you're recognised in <b>dark and bright</b> rooms.
+          Only a <b>real, live face</b> is accepted — photos are rejected.
+          <br><span style="color:var(--cyan)">Please stand back about half a metre.</span>
+        </p>
+        <button onclick="startEnroll()">▶ Start guided enrollment</button>
+        <button onclick="enrollFinger()" style="margin-top:8px;background:linear-gradient(135deg,#7c5cff,#3b82f6)">
+          + Add fingerprint</button>
+      </div>
+
+      <div id="enroll-active" style="display:none">
+        <div class="enroll-stage">
+          <div class="ring">
+            <svg viewBox="0 0 120 120">
+              <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+              <circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="52"
+                      stroke-dasharray="326.7" stroke-dashoffset="326.7"></circle>
+            </svg>
+            <div class="ring-mid"><span id="pose-arrow" class="pose-arrow">⊙</span></div>
+          </div>
+          <div class="enroll-instr">
+            <div class="pose-label" id="pose-label">Get ready…</div>
+            <div class="pose-hint muted" id="pose-hint">Stand back ~0.5 m</div>
+            <div class="step-dots" id="step-dots"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="reg-result" class="result"></div>
+    </div>
+
+    <div id="panel-run" style="display:none">
+      <h2>Run recognition</h2>
+      <p class="muted">Step in front of the camera. If you're registered it asks
+        <b>"is that you?"</b>, then gives you <b>2 random actions</b> to confirm you're real.
+        Unregistered faces are denied immediately.</p>
+      <button id="run-btn" onclick="toggleRun()">Start recognition</button>
+      <div id="run-result" class="result big">—</div>
+      <h2 style="margin-top:18px">Live log</h2>
+      <ul id="recent" class="recent"><li class="muted">No events yet.</li></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+let runTimer = null;
+let lastName = '';
+let freezeUntil = 0;          // after a grant, pause checks for GRANT_FREEZE_MS
+const GRANT_FREEZE_MS = 5000; // 5 s delay between one grant and the next check
+
+function setMode(m){
+  if(enrolling){ return; }   // don't interrupt a running enrollment
+  document.getElementById('tab-reg').classList.toggle('on', m==='reg');
+  document.getElementById('tab-run').classList.toggle('on', m==='run');
+  document.getElementById('panel-reg').style.display = m==='reg' ? 'block':'none';
+  document.getElementById('panel-run').style.display = m==='run' ? 'block':'none';
+  const cam = document.getElementById('cam');
+  if(cam && !cam.src.endsWith('/camera/stream')) cam.src='/camera/stream';  // plain (no mesh)
+  if (m!=='run') stopRun();
+}
+
+/* ---------- guided multi-angle enrollment ---------- */
+const POSES = [
+  {label:'Look straight ahead', hint:'Stand back ~0.5 m · hold still', arrow:'⊙', count:7},
+  {label:'Turn your head LEFT', hint:'slowly — keep eyes on screen',  arrow:'⟸', count:6},
+  {label:'Turn your head RIGHT',hint:'slowly — keep eyes on screen',  arrow:'⟹', count:6},
+  {label:'Tilt your head UP',   hint:'just a little',                 arrow:'⟰', count:5},
+  {label:'Tilt your head DOWN', hint:'just a little',                 arrow:'⟱', count:5},
+];
+const TOTAL = POSES.reduce((s,p)=>s+p.count, 0);
+const RING_LEN = 326.7;
+let enrolling = false;
+
+function setRing(frac){
+  document.getElementById('ring-fg').style.strokeDashoffset = RING_LEN*(1-Math.min(1,frac));
+}
+function buildDots(){
+  document.getElementById('step-dots').innerHTML =
+    POSES.map((_,i)=>`<i class="dot" id="dot-${i}"></i>`).join('');
+}
+function setPose(p, i, active){
+  const arrow=document.getElementById('pose-arrow');
+  arrow.textContent=p.arrow;
+  arrow.className='pose-arrow '+(active?'arrow-anim':'');
+  document.getElementById('pose-label').textContent=p.label;
+  document.getElementById('pose-hint').textContent=p.hint;
+  for(let k=0;k<POSES.length;k++){
+    const d=document.getElementById('dot-'+k);
+    if(d) d.className='dot'+(k<i?' done':'')+(k===i?' cur':'');
+  }
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function countdown(n){
+  const arrow=document.getElementById('pose-arrow');
+  for(let s=n;s>0;s--){ arrow.textContent=s; arrow.className='pose-arrow tick'; await sleep(750); }
+}
+
+async function startEnroll(){
+  if(enrolling) return;
+  const name = document.getElementById('reg-name').value.trim();
+  const out = document.getElementById('reg-result');
+  if(!name){ out.className='result'; out.textContent='Enter a name first.'; return; }
+  enrolling = true;
+  out.className='result'; out.textContent='';
+  document.getElementById('enroll-idle').style.display='none';
+  document.getElementById('enroll-active').style.display='block';
+  document.getElementById('cam').src='/camera/stream?overlay=mesh&t='+Date.now();  // face mesh on
+  document.getElementById('status').textContent='◉ MESH · enrolling';
+  buildDots(); setRing(0);
+
+  let captured = 0, anySpoof = false;
+  for(let i=0;i<POSES.length;i++){
+    const p = POSES[i];
+    setPose(p, i, false);
+    await countdown(3);                       // get into pose
+    setPose(p, i, true);
+    document.getElementById('pose-hint').textContent='Hold still — capturing…';
+    let j;
+    try{
+      const fd=new FormData(); fd.append('name',name); fd.append('count',p.count); fd.append('pose',p.label);
+      j = await (await fetch('/try/register/step',{method:'POST',body:fd})).json();
+    }catch(e){ j={ok:false,error:'network error'}; }
+
+    if(j.ok){
+      captured += j.captured; setRing(captured/TOTAL);
+      flashRing('ok');
+      if(j.live_fail>0) anySpoof = true;
+    } else {
+      flashRing('bad');
+      if(j.spoof) anySpoof = true;
+      if(captured===0){                       // first pose failed -> abort
+        out.className='result big deny';
+        out.textContent = '⛔ ' + (j.error||'enrollment failed');
+        return endEnroll(false);
+      }
+      // mid-sequence miss: keep what we have, move on
+      document.getElementById('pose-hint').textContent='Missed that angle — continuing…';
+      await sleep(700);
+    }
+  }
+  out.className = anySpoof ? 'result big ok' : 'result big ok';
+  out.textContent = `✓ Enrolled "${name}" with ${captured} samples across ${POSES.length} angles. Switch to Run mode to test.`;
+  endEnroll(true);
+}
+
+function flashRing(kind){
+  const r=document.querySelector('.ring'); if(!r) return;
+  r.classList.remove('flash-ok','flash-bad');
+  void r.offsetWidth;
+  r.classList.add(kind==='ok'?'flash-ok':'flash-bad');
+}
+function endEnroll(){
+  enrolling = false;
+  document.getElementById('enroll-active').style.display='none';
+  document.getElementById('enroll-idle').style.display='block';
+  document.getElementById('cam').src='/camera/stream?t='+Date.now();   // mesh off
+  document.getElementById('status').textContent='◉ LIVE';
+}
+
+async function enrollFinger(){
+  const name = document.getElementById('reg-name').value.trim();
+  const out = document.getElementById('reg-result');
+  if(!name){ out.textContent = 'Enter a name first.'; return; }
+  out.textContent = 'Place finger on the sensor…';
+  const fd = new FormData(); fd.append('name', name);
+  const r = await fetch('/try/enroll-finger', {method:'POST', body: fd});
+  const j = await r.json();
+  out.textContent = j.ok
+    ? `Fingerprint stored for "${j.name}" (slot ${j.slot}, driver: ${j.driver}).`
+    : ('Could not store fingerprint: ' + (j.error||'unknown'));
+}
+
+function toggleRun(){ runTimer ? stopRun() : startRun(); }
+
+function startRun(){
+  document.getElementById('run-btn').textContent = 'Stop';
+  runTimer = setInterval(poll, 450);
+}
+function stopRun(){
+  if(runTimer){ clearInterval(runTimer); runTimer = null; }
+  const b = document.getElementById('run-btn'); if(b) b.textContent = 'Start recognition';
+}
+
+async function poll(){
+  const out = document.getElementById('run-result');
+  try{
+    const j = await (await fetch('/try/recognize')).json();
+    if(!j.ok){ out.textContent = j.error||'error'; return; }
+    const stage = j.stage || (j.face ? 'idle' : 'none');
+
+    // Post-grant cool-off banner: keep the green "granted" ONLY while the server
+    // still reports the SAME granted person standing there. We keep polling the
+    // whole time (never blind) so the instant a different / unknown face appears
+    // the server returns a non-granted stage and the banner clears — a stranger
+    // can never inherit the previous person's "granted". The "no re-grant within
+    // 5 s" safety is enforced server-side (decision.rescan_delay_seconds), so we
+    // no longer need to stop polling here.
+    if(Date.now() < freezeUntil && stage === 'granted'){
+      const left = Math.ceil((freezeUntil - Date.now())/1000);
+      out.className='result big ok';
+      out.textContent = `✓ Access granted — ${lastName}  ·  ready in ${left}s`;
+      if(j.recent) renderRecent(j.recent);
+      return;
+    }
+    freezeUntil = 0;   // cool-off ended, or the subject changed -> re-evaluate now
+
+    if(!j.face){
+      out.className='result big muted'; out.textContent='No face detected';
+    } else if(stage === 'detecting'){
+      out.className='result big muted';
+      out.textContent = j.multi_face ? 'One person at a time, please' : 'Detecting…';
+    } else if(stage === 'denied_unknown'){
+      out.className='result big deny';
+      out.textContent = '⛔ Access denied — not registered';
+    } else if(stage === 'challenge'){
+      out.style.color='';
+      out.className='result big blink-wait';
+      const items = (j.seq||[]).map((label,i)=>{
+        const cls = i < j.step ? 'done' : (i === j.step ? 'cur' : '');
+        const mark = i < j.step ? '✓' : (i+1);
+        return `<span class="chal ${cls}">${mark}&nbsp; ${label}</span>`;
+      }).join('');
+      out.innerHTML = `<div style="font-size:15px">${j.flow_name}: do these to verify</div>`
+        + `<div class="chal-steps">${items}</div>`;
+    } else if(stage === 'granted'){
+      out.style.color='';
+      lastName = j.flow_name || j.name;
+      freezeUntil = Date.now() + GRANT_FREEZE_MS;   // 5 s cool-off before next person
+      out.className='result big ok';
+      out.textContent = `✓ Access granted — ${lastName}` + (j.score ? `  (match ${j.score})` : '');
+    } else if(stage === 'spoof'){
+      out.style.color='';
+      out.className='result big deny';
+      out.textContent = '⛔ Spoofing attempt — blocked & photo saved';
+    } else {
+      out.className='result big muted'; out.textContent='Checking…';
+    }
+    if(j.recent) renderRecent(j.recent);
+  }catch(e){ out.textContent='…'; }
+}
+function renderRecent(rows){
+  const ul = document.getElementById('recent');
+  if(!rows.length){ ul.innerHTML = '<li class="muted">No events yet.</li>'; return; }
+  ul.innerHTML = rows.map(r => {
+    const t = (r.ts||'').split(' ')[1] || r.ts || '';
+    return `<li><span class="rn">${r.name}</span><span class="muted">${r.method} · ${t}</span>`
+         + `<span class="badge ${r.result}">${r.result}</span></li>`;
+  }).join('');
+}
+
+setTimeout(()=>{document.getElementById('status').textContent='◉ LIVE';}, 2500);
+</script>
+{% endif %}
+{% endblock %}

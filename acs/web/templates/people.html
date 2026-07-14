@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}People · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>People</h1></div>
+
+<form class="filters" method="post" action="/people/enroll">
+  <input name="name" placeholder="Full name" required>
+  <button type="submit">Add person</button>
+</form>
+<p class="muted">Adding a person here creates the record. Capture face/finger on the device:
+  <code>python -m acs.enroll --name "Full name"</code></p>
+
+<div class="card">
+  <table>
+    <thead><tr><th>Name</th><th>Faces</th><th>Fingers</th><th>Added</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for p in people %}
+      <tr>
+        <td>
+          <form method="post" action="/people/{{ p.person_id }}/rename" class="inline">
+            <input name="name" value="{{ p.name }}"><button>Rename</button>
+          </form>
+        </td>
+        <td>{{ p.faces }}</td>
+        <td>{{ p.fingers }}</td>
+        <td class="muted">{{ p.created_at }}</td>
+        <td>
+          <form method="post" action="/people/{{ p.person_id }}/delete" class="inline"
+                onsubmit="return confirm('Delete {{ p.name }} and all templates?')">
+            <button class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No people enrolled yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

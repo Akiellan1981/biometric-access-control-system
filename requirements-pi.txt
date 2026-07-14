@@ -1,0 +1,11 @@
+# Install on the Raspberry Pi IN ADDITION to requirements.txt.
+# Tip: on Pi OS (Bookworm) install picamera2 via apt (python3-picamera2), not pip.
+#
+#   sudo apt install -y python3-picamera2 python3-libcamera libportaudio2 alsa-utils
+#   pip install -r requirements.txt -r requirements-pi.txt
+#
+picamera2          # CSI camera (HW-2) — prefer the apt package on Pi OS
+gpiozero           # PIR, relay, status LED, lamp drivers
+lgpio              # REQUIRED GPIO backend on Raspberry Pi 5 (RPi.GPIO does NOT work on Pi 5)
+rpi-lgpio          # RPi.GPIO-compatible shim (motion.py fallback path) on Pi 5
+pyfingerprint      # R307/R503 fingerprint over UART (HW-3)

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Logs · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Logs</h1><a class="btn" href="/export">Download Excel</a></div>
+
+<form class="filters" hx-get="/logs/table" hx-target="#logs-target" hx-trigger="submit, change delay:300ms, every 4s">
+  <input name="name" placeholder="Name">
+  <input name="date" placeholder="YYYY-MM-DD" type="date">
+  <select name="method">
+    <option value="">Any method</option>
+    <option value="face">Face</option>
+    <option value="fingerprint">Fingerprint</option>
+  </select>
+  <select name="result">
+    <option value="">Any result</option>
+    <option value="granted">Granted</option>
+    <option value="denied-unknown">Denied (unknown)</option>
+    <option value="denied-spoof">Denied (spoof)</option>
+    <option value="denied-finger">Denied (finger)</option>
+  </select>
+  <button type="submit">Filter</button>
+</form>
+
+<div class="card" id="logs-target">
+  {% include "_logs_table.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Overview · Access Control{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Overview</h1>
+  <a class="btn" href="/export">Download Excel</a>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span class="k-label">Entries today</span><span class="k-num">{{ stats.entries }}</span></div>
+  <div class="kpi"><span class="k-label">Denied today</span><span class="k-num">{{ stats.denied }}</span></div>
+  <div class="kpi danger"><span class="k-label">Spoof attempts</span><span class="k-num">{{ stats.spoof }}</span></div>
+  <div class="kpi"><span class="k-label">Enrolled people</span><span class="k-num">{{ stats.enrolled }}</span></div>
+</div>
+
+<div class="card">
+  <h2>Entries — last 30 days</h2>
+  {% if chart_max %}
+  <div style="display:flex;align-items:flex-end;gap:3px;height:120px;padding-top:8px">
+    {% for d in chart %}
+    <div title="{{ d.date }}: {{ d.count }}"
+         style="flex:1;min-width:4px;height:{{ d.pct }}%;background:var(--cyan,#22d3ee);border-radius:2px 2px 0 0"></div>
+    {% endfor %}
+  </div>
+  <p class="muted" style="font-size:11.5px;margin-top:6px">Granted entries per day · peak {{ chart_max }}/day</p>
+  {% else %}
+  <p class="muted">No entries recorded yet.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Recent events</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Time</th><th>Method</th><th>Result</th></tr></thead>
+    <tbody>
+      {% for r in recent %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td>{{ r.ts }}</td>
+        <td>{{ r.method }}</td>
+        <td><span class="badge {{ r.result }}">{{ r.result }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No events yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Intruder gallery</h2>
+  <div class="gallery">
+    {% for r in intruders %}
+      <a class="thumb" href="/media/unauthorized/{{ r.image_path.split('/')[-1].split('\\')[-1] }}">
+        <span class="badge {{ r.result }}">{{ 'spoof' if r.result == 'denied-spoof' else 'unknown' }}</span>
+      </a>
+    {% else %}
+      <p class="muted">No intruder captures.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

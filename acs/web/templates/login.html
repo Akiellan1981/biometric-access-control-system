@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Access Control</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+  <form class="login-card" method="post" action="/login">
+    <div class="brand">
+      <svg class="shield" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"
+              fill="rgba(39,224,255,.12)" stroke="currentColor" stroke-width="1.5"
+              stroke-linejoin="round"/>
+        <path d="M8.5 12.2l2.4 2.4 4.6-5" stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-txt"><span class="lite">AEGIS</span>
+        <small>Biometric Access Control</small></span>
+    </div>
+    <p class="muted">Secure console — authenticate to view biometric records.</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <label>Username<input name="username" autofocus required></label>
+    <label>Password<input name="password" type="password" required></label>
+    <button type="submit">Sign in</button>
+  </form>
+</body>
+</html>

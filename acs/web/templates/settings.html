@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Settings · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Settings</h1></div>
+{% if msg %}<div class="notice">{{ msg }}</div>{% endif %}
+{% if not pw_changed %}<div class="error">For security, change the default password below before using the dashboard.</div>{% endif %}
+
+<div class="card">
+  <h2>Timers</h2>
+  <p class="muted">Both take effect immediately (no restart).</p>
+  <form method="post" action="/settings/runtime" class="stack">
+    <label>Access hold (seconds) — how long a grant stays valid before the person must verify again
+      <input name="grant_hold" type="number" min="2" max="300" value="{{ grant_hold }}" required>
+    </label>
+    <label>Spoof timeout (seconds) — perform the actions within this or it's flagged as spoofing (max 30)
+      <input name="spoof_timeout" type="number" min="3" max="30" value="{{ spoof_timeout }}" required>
+    </label>
+    <label>Camera sleep (seconds of no motion before the camera powers down)
+      <input name="idle_off" type="number" min="5" max="3600" value="{{ idle_off }}" required>
+    </label>
+    <button type="submit">Save timers</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Camera source</h2>
+  <p class="muted">Switch between this PC's webcam (for testing) and the Raspberry Pi camera.
+    Applies on the next camera use.</p>
+  <form method="post" action="/settings/camera" class="stack">
+    <label>Camera
+      <select name="source">
+        <option value="opencv"   {% if camera_source=='opencv' %}selected{% endif %}>PC webcam</option>
+        <option value="picamera2"{% if camera_source=='picamera2' %}selected{% endif %}>Raspberry Pi camera</option>
+        <option value="auto"     {% if camera_source=='auto' %}selected{% endif %}>Auto (Pi → PC → mock)</option>
+      </select>
+    </label>
+    <button type="submit">Set camera</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Voice language</h2>
+  <p class="muted">Spoken prompts and access messages at the door. Changing it takes effect
+    immediately and plays a confirmation in the new language on the door speaker.</p>
+  <form method="post" action="/settings/language" class="stack">
+    <label>Language
+      <select name="lang">
+        {% for code, label in languages.items() %}
+        <option value="{{ code }}" {% if code == current_lang %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Set language &amp; test audio</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Change password</h2>
+  <form method="post" action="/settings/password" class="stack">
+    <label>Current password<input name="current" type="password" required></label>
+    <label>New password<input name="new" type="password" required></label>
+    <button type="submit">Update password</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Current configuration (read-only)</h2>
+  <p class="muted">Edit <code>config/config.yaml</code> and restart the service to change these.</p>
+  <table>
+    <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+    <tbody>
+      {% for k, v in shown.items() %}
+      <tr><td><code>{{ k }}</code></td><td>{{ v }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

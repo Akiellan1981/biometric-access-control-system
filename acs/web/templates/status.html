@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}System status · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>System status</h1></div>
+
+{% set dot = {'ok':'#16a34a','warn':'#d97706','fail':'#dc2626'} %}
+
+<div class="card">
+  <h2>Subsystem checks</h2>
+  <table>
+    <thead><tr><th>Component</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for c in checks %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;
+              background:{{ dot[c.status] }};margin-right:6px"></span>{{ c.status|upper }}</td>
+        <td class="muted">{{ c.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Live camera &amp; recognition test</h2>
+  <p class="muted">Opens the camera, grabs a frame and runs one recognition pass.
+    Stand in front of the camera, then click.</p>
+  <button id="cam-btn" onclick="camTest()">Test camera &amp; recognition</button>
+  <div id="cam-res" class="result" style="margin-top:10px">—</div>
+</div>
+
+{% if warnings %}
+<div class="card">
+  <h2>Production warnings</h2>
+  <ul class="recent">
+    {% for w in warnings %}<li><span style="color:#d97706">⚠</span>&nbsp; {{ w }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Configuration</h2>
+  <table>
+    <tbody>
+      {% for k, v in info.items() %}
+      <tr><td><code>{{ k }}</code></td><td>{{ v }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+async function camTest(){
+  const out = document.getElementById('cam-res');
+  const btn = document.getElementById('cam-btn');
+  btn.disabled = true; out.textContent = 'Testing… (opening camera)';
+  try{
+    const j = await (await fetch('/status/camera-test')).json();
+    if(!j.ok){ out.style.color='#dc2626'; out.textContent = '✗ ' + (j.error||'failed'); }
+    else{
+      out.style.color='#16a34a';
+      out.innerHTML = '✓ Camera + engine OK'
+        + '<br>liveness monitor: ' + (j.liveness_monitor ? 'loaded' : 'NOT loaded')
+        + '<br>face in view: ' + (j.face_detected ? ('yes — ' + (j.name||'unknown')) : 'no')
+        + '<br>stage: ' + (j.stage||'-');
+    }
+  }catch(e){ out.style.color='#dc2626'; out.textContent = '✗ request failed'; }
+  btn.disabled = false;
+}
+</script>
+{% endblock %}

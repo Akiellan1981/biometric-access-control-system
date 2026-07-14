@@ -1,0 +1,15 @@
+[Unit]
+Description=Dual-Modal Biometric Access Control
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/Biometric-Access-Control-System
+ExecStart=/home/pi/Biometric-Access-Control-System/.venv/bin/python run.py --web
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

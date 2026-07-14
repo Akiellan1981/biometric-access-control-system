@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Network · Access Control{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Network</h1></div>
+{% if msg %}<div class="notice">{{ msg }}</div>{% endif %}
+
+<div class="card">
+  <h2>This device</h2>
+  <p>View the live feed from any device on the same network at:</p>
+  <p style="font-size:18px"><code>http://{{ status.ip }}:{{ port }}</code></p>
+  <table>
+    <tbody>
+      <tr><td>IP address</td><td><code>{{ status.ip }}</code></td></tr>
+      <tr><td>Current Wi-Fi</td><td>{{ status.ssid or '—' }}</td></tr>
+      <tr><td>Wi-Fi control</td><td>{{ 'available' if status.available else 'not available on this OS (Raspberry Pi only)' }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+{% if status.available %}
+<div class="card">
+  <h2>Connect to Wi-Fi</h2>
+  <p class="muted">Join the same network as the device you'll watch from. After connecting,
+    the IP above may change — reopen the new address.</p>
+  <a class="btn" href="/network?scan=1">Scan for networks</a>
+  <form method="post" action="/network/connect" class="stack" style="margin-top:12px">
+    <label>Network (SSID)
+      {% if nets %}
+      <select name="ssid" required>
+        {% for n in nets %}
+        <option value="{{ n.ssid }}">{{ n.ssid }}{% if n.in_use %} (connected){% endif %} · {{ n.signal }}%</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <input name="ssid" type="text" placeholder="Wi-Fi name" required>
+      {% endif %}
+    </label>
+    <label>Password<input name="password" type="password" autocomplete="off"></label>
+    <button type="submit">Connect</button>
+  </form>
+  {% if did_scan and not nets %}<p class="muted">No networks found — try scanning again.</p>{% endif %}
+</div>
+{% else %}
+<div class="card">
+  <h2>Connect to Wi-Fi</h2>
+  <p class="muted">Wi-Fi control runs on the Raspberry Pi (via NetworkManager / nmcli).
+    On this PC, connect using the OS network settings. On the Pi, use this page or
+    <code>sudo raspi-config</code> / <code>nmcli device wifi connect "SSID" password "PW"</code>.</p>
+</div>
+{% endif %}
+{% endblock %}

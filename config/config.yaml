@@ -1,0 +1,165 @@
+# ============================================================================
+#  Dual-Modal Biometric Access Control — configuration
+#  Every tunable lives here. Edit and restart the service to apply.
+# ============================================================================
+
+mode: run                 # run | register  (default device mode)
+dev_mode: true            # true on a PC without hardware: use mocks, fail-open liveness
+                          # SET TO false ON THE PI for real security behavior.
+
+paths:
+  db: data/access.db
+  models: models
+  voice: voice_assets
+  unauthorized: data/unauthorized  # dashboard copy of intruder images (admin-deletable)
+  archive: data/archive            # PROTECTED copy on the memory card: no manual delete,
+                                   # auto-purged at retention_days only (tamper-resistant evidence)
+  key_file: data/secret.key        # auto-created; encrypts biometric templates
+
+camera:
+  source: auto            # auto | picamera2 | opencv | mock
+  index: 0                # opencv webcam index (dev)
+  width: 640
+  height: 480
+  fps: 15
+
+face:
+  detect_model: face_detection_yunet_2023mar.onnx
+  recog_model: face_recognition_sface_2021dec.onnx
+  min_face_width_px: 80            # FR-1.4 ignore distant/background faces
+  detect_score_thr: 0.8
+  recognition_cosine_thr: 0.363    # FR-1.2 OpenCV default; RETUNE on-site (calibration)
+  match_margin: 0.06               # best person must beat 2nd-best person by this (rejects look-alike mix-ups; 0=off)
+  confirm_frames: 5                # FR-1.5 N consecutive confirmations
+  detect_confirm_frames: 3         # require the same identity over N frames before acting (solid detection)
+  enroll_min_blur: 30              # enrollment-only: reject samples with Laplacian focus < this (blurry); 0=off
+  enroll_bright_min: 45            # enrollment-only: reject too-dark face crops (mean brightness)
+  enroll_bright_max: 215           # enrollment-only: reject blown-out face crops
+
+liveness:
+  enabled: true
+  require_liveness: true           # if model missing AND not dev_mode -> deny (fail closed)
+  minifasnet_models:               # ensemble: [scale, onnx file]
+    - [2.7, "2.7_80x80_MiniFASNetV2.onnx"]
+    - [4.0, "4_0_0_80x80_MiniFASNetV1SE.onnx"]
+  live_score_thr: 0.90             # FR-1.3 MiniFASNet P(real) threshold (Pi)
+  passive_depth_thr: 0.80          # FALLBACK fast-pass for people with no calibrated baseline / unknowns
+  depth_smooth_frames: 7           # median-smooth depth over N frames (kills flicker around the threshold)
+  live_depth_factor: 0.70          # SELF-CALIBRATED: per-person fast-pass = their enrolled frontal depth * this
+  live_depth_floor: 0.15           # hard minimum fast-pass depth (a photo's ~0 can never pass, even if baseline low)
+  require_blink: true              # enable the active monitor (blink/turn challenge)
+  depth_fast_pass: false           # false = EVERYONE must blink+turn (most consistent); true = a close 3D face grants instantly
+  active_window_seconds: 4.0       # a blink/turn within this window counts toward the challenge
+  verify_hold_seconds: 5.0         # once the challenge passes, stay 'verified' this long (stable, no flicker)
+  face_lost_grace_seconds: 0.5     # ignore <0.5s face dropouts so a verified session doesn't flicker
+  enroll_live_window_seconds: 20.0 # enrollment: accept samples if a real blink happened within this window
+  spoof_timeout_seconds: 6.0       # below-threshold face held this long without passing the challenge = spoof
+  turn_range_thr: 0.18             # legacy: yaw range to count as a (non-directional) head-turn
+  # Access flow: detection FIRST ("{name}, is that you?"), 2s gap, then liveness.
+  challenge_steps: 2               # number of random actions required (blink / turn L / turn R)
+  confirm_gap_seconds: 2.0         # (unused) "is that you?" confirm step removed — straight to actions
+  challenge_timeout_seconds: 10.0  # actions must be done within this -> else spoof + capture.
+                                   # DASHBOARD-editable (Settings→Timers), capped at 30s.
+  retry_hold_seconds: 3.0          # after a spoof, auto-return to checking so the person can retry
+  turn_dir_thr: 0.10               # yaw deviation from neutral to register a directional turn
+  turn_invert: true                # swaps LEFT/RIGHT detection (mirrored webcam feed); set false if it feels reversed
+  use_blink: true                  # MediaPipe FaceMesh EAR (secondary signal)
+  blink_ear_thr: 0.21              # EAR fallback "clearly closed" (used only if blendshapes unavailable)
+  blink_open_thr: 0.27             # EAR fallback "clearly open" (hysteresis)
+  blink_min_drop: 0.08             # EAR fallback min dip below baseline for a real blink
+  blink_shape_close: 0.45          # PREFERRED: model eyeBlink score to count as closed (0=open,1=closed)
+  blink_shape_open: 0.30           # model eyeBlink score to count as reopened (hysteresis)
+
+fingerprint:
+  driver: mock                     # mock | pyfingerprint   (FR-2.2)
+  port: /dev/serial0               # stable UART alias on the Pi (GPIO14/15)
+  baudrate: 57600
+  poll_seconds: 0.4
+  confidence_min: 50
+
+decision:
+  cooldown_seconds: 30             # FR-3.3 (legacy) per-PERSON log window
+  grant_hold_seconds: 5            # ACCESS VALID this long; then it re-locks and the person must
+                                   # verify again to be granted again. DASHBOARD-editable (Settings).
+  rescan_delay_seconds: 5          # global: after ANY grant, ignore new scans for this long (next person waits 5s)
+  fingerprint_required_for_unlock: false   # FR-3.4 security knob
+
+# IR/PIR motion sensor: wake the camera only when someone is there (saves power /
+# sensor life on the Pi). Mock driver = always awake, so PC/dev is unaffected.
+motion:
+  enabled: false                   # SET true on the Pi with a PIR wired
+  driver: mock                     # mock | gpio
+  pin: 4                           # BCM GPIO pin the PIR OUT is wired to
+  idle_off_seconds: 60             # turn the camera off after this long with no motion
+  poll_seconds: 0.2
+
+relay:
+  enabled: false                   # FR-3.5 / HW-9
+  gpio_pin: 17
+  active_high: true
+  hold_seconds: 3
+
+# Status LED next to the lens: ON while the camera is awake/checking, OFF in sleep.
+status_led:
+  enabled: false                   # SET true on the Pi
+  driver: gpio                     # gpio | mock
+  pin: 23                          # BCM pin
+  active_high: true
+
+# Lamp/illuminator: auto-on when the camera scene is too dark for recognition
+# (brightness read from the frame — no separate light sensor needed).
+lamp:
+  enabled: false                   # SET true on the Pi if a light is wired
+  driver: gpio                     # gpio | mock
+  pin: 24                          # BCM pin (relay/MOSFET to the lamp)
+  active_high: true
+  dark_threshold: 60               # mean frame brightness 0-255; below this -> lamp on
+  bright_margin: 15                # hysteresis so it doesn't flicker near the threshold
+
+intruder:
+  enabled: true
+  dedupe_seconds: 20               # FR-5.3
+  retention_days: 31               # auto-delete each image after 31 days (dashboard AND memory-card archive)
+  encrypt_images: true             # store captured faces encrypted (*.jpg.enc); dashboard decrypts to view
+  archive_copy: true               # also write a protected copy to paths.archive (no manual delete)
+
+voice:
+  enabled: true
+  language: en                      # default; en | ta | hi. Switchable LIVE from the
+                                    # dashboard (stored in DB key 'voice_lang').
+  # Clip FILENAMES (same in every language); the WAVs live in language subfolders:
+  #   voice_assets/en/<file>   voice_assets/ta/<file>   voice_assets/hi/<file>
+  # Render them with: python scripts/render_voice.py   (or drop your own WAVs).
+  clips:
+    registered: registered.wav
+    language_selected: language_selected.wav   # spoken in the NEW language on switch
+    welcome: welcome.wav            # on camera wake: "stand in front / place finger"
+    # Enrollment guidance (headless register):
+    registration_active: registration_active.wav
+    registered_ok: registered_ok.wav            # "registered successfully"
+    registration_failed: registration_failed.wav
+    come_closer: come_closer.wav
+    stand_back: stand_back.wav
+    look_straight: look_straight.wav
+    look_up: look_up.wav
+    look_down: look_down.wav
+    # Voice-guided liveness for a SCREENLESS door (spoken instead of on-screen text).
+    confirm: confirm.wav            # "Recognised. Please hold still."
+    blink: blink.wav                # "Please blink your eyes."
+    turn_left: turn_left.wav        # "Please turn your head to the left."
+    turn_right: turn_right.wav      # "Please turn your head to the right."
+    verify_ok: verify_ok.wav        # short "Good." between steps (optional)
+    # Outcomes (DecisionEngine), per method:
+    granted_face: granted_face.wav      # "Access granted by face recognition."
+    denied_face: denied_face.wav        # "Access denied by face recognition."
+    denied_spoof: denied_spoof.wav      # "Movement not detected. Please try again."
+    granted_finger: granted_finger.wav  # "Access granted by fingerprint."
+    denied_finger: denied_finger.wav    # "Access denied by fingerprint. Please try again."
+
+web:
+  host: 127.0.0.1                  # localhost only (this machine). Use 0.0.0.0 to allow LAN access.
+  port: 8010                       # 8000 = Docker, 8080 = aquapump; 8010 is free here
+  admin_user: admin
+  default_password: admin          # seeded on first run — CHANGE IT from the dashboard
+  session_secret: change-me-to-a-long-random-string
+  session_hours: 8

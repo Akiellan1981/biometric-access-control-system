@@ -1,0 +1,16 @@
+<table>
+  <thead><tr><th>Name</th><th>Date &amp; time</th><th>Method</th><th>Result</th><th>Score</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.name }}</td>
+      <td>{{ r.ts }}</td>
+      <td>{{ r.method }}</td>
+      <td><span class="badge {{ r.result }}">{{ r.result }}</span></td>
+      <td>{{ '%.3f'|format(r.score or 0) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">No matching events.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

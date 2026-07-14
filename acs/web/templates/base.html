@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Access Control{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="shield" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"
+              fill="rgba(39,224,255,.12)" stroke="currentColor" stroke-width="1.5"
+              stroke-linejoin="round"/>
+        <path d="M8.5 12.2l2.4 2.4 4.6-5" stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-txt"><span><span class="lite">AEGIS</span></span>
+        <small>Biometric Access Control</small></span>
+    </div>
+    {% set path = request.url.path %}
+    <nav>
+      <a href="/"          class="{{ 'on' if path == '/' }}"><span class="ico">▦</span> Overview</a>
+      <a href="/try"       class="{{ 'on' if path.startswith('/try') }}"><span class="ico">◉</span> Try (live)</a>
+      <a href="/logs"      class="{{ 'on' if path.startswith('/logs') }}"><span class="ico">☰</span> Logs</a>
+      <a href="/intruders" class="{{ 'on' if path.startswith('/intruders') }}"><span class="ico">⚠</span> Intruders</a>
+      <a href="/people"    class="{{ 'on' if path.startswith('/people') }}"><span class="ico">◍</span> People</a>
+      <a href="/status"    class="{{ 'on' if path.startswith('/status') }}"><span class="ico">✓</span> Status</a>
+      <a href="/network"   class="{{ 'on' if path.startswith('/network') }}"><span class="ico">⌁</span> Network</a>
+      <a href="/settings"  class="{{ 'on' if path.startswith('/settings') }}"><span class="ico">⚙</span> Settings</a>
+    </nav>
+    <div class="side-foot">
+      <a href="/export">⤓ Export Excel</a>
+      <a href="/logout">⏻ Log out{% if user %} ({{ user }}){% endif %}</a>
+      <div class="cap-chips">
+        <span>AES-256</span><span>EDGE-AI</span><span>OFFLINE</span><span>ANTI-SPOOF</span>
+      </div>
+    </div>
+  </aside>
+  <main class="content">
+    <div class="topbar">
+      <div class="sys-status">
+        <span class="led"></span> System Armed
+        <span class="sep">//</span> <span class="on-air">Edge AI Online</span>
+        <span class="sep">//</span> Face + Fingerprint
+      </div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script>
+  (function(){
+    var el = document.getElementById('clock');
+    function tick(){ if(el) el.textContent = new Date().toLocaleTimeString('en-GB'); }
+    setInterval(tick, 1000); tick();
+  })();
+</script>
+</body>
+</html>

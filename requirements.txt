@@ -1,0 +1,12 @@
+# Core / cross-platform (works on Windows for development too)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+pyyaml>=6.0
+numpy>=1.26
+opencv-python>=4.9       # provides cv2.FaceDetectorYN (YuNet) + cv2.FaceRecognizerSF (SFace)
+onnxruntime>=1.17        # MiniFASNet liveness
+mediapipe>=0.10          # FaceMesh blink (EAR) — secondary liveness signal
+openpyxl>=3.1            # Excel export
+cryptography>=42         # encrypt biometric templates at rest
